@@ -1,18 +1,102 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider as NavigationThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useColorScheme } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import { useEffect } from 'react';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-import { AnimatedSplashOverlay } from '@/components/animated-icon';
-import AppTabs from '@/components/app-tabs';
+import { AuthProvider, useAuth } from '@/features/auth/hooks/AuthProvider';
+import { configureNotifications } from '@/features/medications/services/notificationService';
+import { useProfile } from '@/features/profile/hooks/useProfile';
+import { SettingsProvider, useSettings } from '@/features/settings/hooks/SettingsProvider';
+import { queryClient } from '@/lib/queryClient';
+import { ThemeProvider, useTheme } from '@/theme';
 
 SplashScreen.preventAutoHideAsync();
+configureNotifications();
 
-export default function TabLayout() {
-  const colorScheme = useColorScheme();
+export default function RootLayout() {
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <AnimatedSplashOverlay />
-      <AppTabs />
+    <SafeAreaProvider>
+      <QueryClientProvider client={queryClient}>
+        <SettingsProvider>
+          <ThemedApp />
+        </SettingsProvider>
+      </QueryClientProvider>
+    </SafeAreaProvider>
+  );
+}
+
+function ThemedApp() {
+  const { settings } = useSettings();
+  return (
+    <ThemeProvider preference={settings.themePreference}>
+      <AuthProvider>
+        <RootNavigator />
+      </AuthProvider>
     </ThemeProvider>
+  );
+}
+
+function RootNavigator() {
+  const theme = useTheme();
+  const { loaded } = useSettings();
+  const { session, initializing } = useAuth();
+  const profile = useProfile();
+
+  const isSignedIn = Boolean(session);
+  const profileReady = !isSignedIn || !profile.isPending;
+  const ready = loaded && !initializing && profileReady;
+
+  const hasProfile = isSignedIn && Boolean(profile.data);
+  const needsOnboarding = isSignedIn && profile.isSuccess && !profile.data;
+  const profileFailed = isSignedIn && profile.isError;
+
+  useEffect(() => {
+    if (ready) void SplashScreen.hideAsync();
+  }, [ready]);
+
+  if (!ready) return null;
+
+  const base = theme.scheme === 'dark' ? DarkTheme : DefaultTheme;
+  const navigationTheme = {
+    ...base,
+    colors: {
+      ...base.colors,
+      background: theme.colors.background,
+      card: theme.colors.surface,
+      text: theme.colors.text,
+      primary: theme.colors.primaryDark,
+      border: theme.colors.border,
+    },
+  };
+
+  return (
+    <NavigationThemeProvider value={navigationTheme}>
+      <StatusBar style={theme.scheme === 'dark' ? 'light' : 'dark'} />
+      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: theme.colors.background } }}>
+        <Stack.Protected guard={!isSignedIn}>
+          <Stack.Screen name="(auth)" />
+        </Stack.Protected>
+
+        <Stack.Protected guard={needsOnboarding}>
+          <Stack.Screen name="onboarding" />
+        </Stack.Protected>
+
+        <Stack.Protected guard={profileFailed}>
+          <Stack.Screen name="sin-conexion" />
+        </Stack.Protected>
+
+        <Stack.Protected guard={hasProfile}>
+          <Stack.Screen name="(drawer)" />
+          <Stack.Screen name="form/persona" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="form/medicamento" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="form/inventario" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="form/evento" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="form/registro" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="form/informacion" options={{ presentation: 'modal' }} />
+        </Stack.Protected>
+      </Stack>
+    </NavigationThemeProvider>
   );
 }
