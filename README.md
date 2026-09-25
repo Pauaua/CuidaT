@@ -1,56 +1,155 @@
-# Welcome to your Expo app 👋
+# CuidApp
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+App móvil para personas cuidadoras de personas dependientes. Ayuda a organizar
+medicamentos, inventario, rutinas e información útil y, sobre todo, **incentiva que
+quien cuida tenga tiempo libre**. El bienestar de la cuidadora es parte central del producto.
 
-## Get started
+> El nombre es un placeholder. Cámbialo en un solo lugar: `src/config/app.ts`
+> (y, si quieres, `name` en `app.json` para el nombre del ícono).
 
-1. Install dependencies
+## Stack
 
-   ```bash
-   npm install
-   ```
+- Expo SDK 57 + React Native + TypeScript (estricto)
+- Expo Router (tabs + stacks + rutas protegidas)
+- Supabase (Auth, PostgreSQL, Row Level Security)
+- react-hook-form + zod (mensajes en español)
+- @tanstack/react-query
+- expo-notifications (recordatorios locales de medicamentos)
+- react-native-calendars
+- @expo/vector-icons
 
-2. Start the app
+## Requisitos
 
-   ```bash
-   npx expo start
-   ```
+- Node.js 20 o superior
+- Un proyecto en [Supabase](https://supabase.com) (el plan gratis basta)
+- Expo Go en tu teléfono, o un emulador Android / simulador iOS
 
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## Instalación
 
 ```bash
-npm run reset-project
+npm install
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+### 1. Base de datos
 
-### Other setup steps
+1. En Supabase, abre **SQL Editor → New query**.
+2. Pega el contenido completo de `supabase/schema.sql` y ejecútalo.
+   Crea los enums, las tablas, los índices, los triggers y las políticas RLS.
+   Puedes volver a ejecutarlo sin problemas (es idempotente).
+3. En **Authentication → Providers**, deja activado *Email*. Si no quieres confirmar
+   el correo mientras desarrollas, desactiva *Confirm email*.
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+### 2. Variables de entorno
 
-## Learn more
+Copia el ejemplo y completa con los datos de **Project Settings → API**:
 
-To learn more about developing your project with Expo, look at the following resources:
+```bash
+cp .env.example .env
+```
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+```env
+EXPO_PUBLIC_SUPABASE_URL=https://TU-PROYECTO.supabase.co
+EXPO_PUBLIC_SUPABASE_ANON_KEY=tu-anon-key
+```
 
-## Join the community
+`.env` está en `.gitignore`. Usa solo la *anon key* (nunca la *service role key*).
 
-Join our community of developers creating universal apps.
+### 3. Correr la app
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+```bash
+npx expo start
+```
+
+Escanea el QR con Expo Go o presiona `a` (Android) o `i` (iOS).
+
+Otros comandos:
+
+```bash
+npx tsc --noEmit   # chequeo de tipos
+npx expo lint      # lint
+```
+
+> **Notificaciones:** los recordatorios locales funcionan en Expo Go. Para probarlos de
+> forma confiable (sobre todo en Android), usa una *development build*
+> (`npx expo run:android` o `eas build --profile development`).
+
+## Estructura
+
+```
+supabase/
+  schema.sql               # tablas, enums, índices, triggers y políticas RLS
+src/
+  app/                     # rutas (Expo Router)
+    _layout.tsx            # providers + rutas protegidas (auth / onboarding / app)
+    (auth)/                # login, register
+    onboarding.tsx         # creación del perfil de la cuidadora
+    sin-conexion.tsx       # si no se pudo cargar el perfil
+    (tabs)/                # Inicio, Cuidado, Inventario, Recreación, Más
+      index.tsx
+      cuidado/             # lista + detalle [id] con pestañas
+      inventario.tsx
+      recreacion.tsx
+      mas/                 # registros, informaciones, perfil, configuración
+    form/                  # modales de crear/editar (persona, medicamento, …)
+  components/
+    ui/                    # Button, Card, Input, TextArea, Select, DatePicker,
+                           # TimePicker, Badge, EmptyState, Header, FAB, Screen,
+                           # Skeleton, ErrorState, Chip, SegmentedTabs
+    form/                  # conectores react-hook-form ↔ UI y FormScreen
+  config/app.ts            # nombre de la app y constantes
+  features/<módulo>/       # components, hooks, services, schema, constants
+    auth · profile · care · medications · inventory · records · info · recreation · settings
+  lib/                     # supabase, react-query, fechas, validación, linking
+  theme/                   # colores (claro/oscuro), tipografía, espaciados, radios, sombras
+  types/database.ts        # tipos de cada tabla
+```
+
+Regla de capas: **services** hablan con Supabase, **hooks** envuelven los services con
+React Query y la **UI** solo consume hooks.
+
+## Decisiones importantes
+
+- **Seguridad y RLS:** cada tabla tiene RLS. `usuarios.auth_user_id` se vincula con
+  `auth.users`, y la función `current_usuario_id()` resuelve el dueño en las políticas.
+  Los `usuario_id` se completan solos en la base de datos (valor por defecto), así que la
+  app nunca los envía. Los medicamentos se protegen a través de su persona cuidada.
+- **Datos sensibles:** la app no escribe datos de salud en la consola. Los errores de
+  Supabase se traducen a mensajes genéricos (`toFriendlyError`).
+- **Historial automático:**
+  - Marcar una toma como dada crea un registro `medicamento_administrado`, con
+    `medicamento_id` y `hora_programada`, para saber qué tomas del día ya se dieron.
+  - Crear un ítem o cambiar su cantidad genera un registro `cambio_inventario` mediante
+    un trigger en la base de datos.
+  - Los botones + y − usan la función `ajustar_inventario` (atómica) y actualizan la
+    pantalla al instante, antes de que responda el servidor.
+- **Recordatorios:** cada hora de toma programa una notificación diaria con el id
+  `med-<id>-<HHMM>`. Al abrir la app se resincronizan con la base de datos, por ejemplo
+  si cambias de teléfono. Se pueden desactivar en Configuración.
+- **Stock bajo:** cada ítem tiene su propio `umbral_bajo`. En Configuración se define el
+  valor que se sugiere al crear ítems nuevos.
+- **Balance semanal:** las horas se calculan por solapamiento con la semana actual (de
+  lunes a domingo). El día libre, la actividad social y el autocuidado cuentan como
+  tiempo libre; el turno de cuidado cuenta como tiempo de cuidado. Los mensajes
+  acompañan y nunca culpan (`features/recreation/messages.ts`).
+- **Accesibilidad:**
+  - Texto base de 16 px y áreas táctiles de 48 px o más.
+  - Etiquetas `accessibilityLabel` en todos los controles.
+  - Respeta el tamaño de fuente del sistema (con un tope de 1,8x).
+  - `textMuted` se oscureció a `#6B6384` para cumplir contraste AA.
+- **Responsive:**
+  - `Screen` centra el contenido con un ancho máximo en tablets.
+  - Inventario e Informaciones pasan a 2 columnas desde 700 px de ancho.
+  - Los formularios se ajustan al ancho de teléfonos pequeños.
+- **Modo oscuro:** automático según el sistema, o fijado en Configuración.
+
+## Preparado para la app de la persona cuidada
+
+`personas_cuidadas.cuenta_auth_id` (hoy `null`) permitirá vincular una cuenta propia a
+la persona cuidada. Cuando se construya esa app, basta con agregar políticas `select`
+que comparen `cuenta_auth_id = auth.uid()` en `personas_cuidadas`, `medicamentos` y
+`registros`.
+
+## Fuera de alcance por ahora
+
+- App para la persona cuidada
+- Pagos y suscripciones
