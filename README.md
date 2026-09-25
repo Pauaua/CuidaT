@@ -4,9 +4,6 @@ App móvil para personas cuidadoras de personas dependientes. Ayuda a organizar
 medicamentos, inventario, rutinas e información útil y, sobre todo, **incentiva que
 quien cuida tenga tiempo libre**. El bienestar de la cuidadora es parte central del producto.
 
-> El nombre es un placeholder. Cámbialo en un solo lugar: `src/config/app.ts`
-> (y, si quieres, `name` en `app.json` para el nombre del ícono).
-
 ## Stack
 
 - Expo SDK 57 + React Native + TypeScript (estricto)
@@ -36,8 +33,8 @@ npm install
 2. Pega el contenido completo de `supabase/schema.sql` y ejecútalo.
    Crea los enums, las tablas, los índices, los triggers y las políticas RLS.
    Puedes volver a ejecutarlo sin problemas (es idempotente).
-3. En **Authentication → Providers**, deja activado *Email*. Si no quieres confirmar
-   el correo mientras desarrollas, desactiva *Confirm email*.
+3. En **Authentication → Providers**, deja activado _Email_. Si no quieres confirmar
+   el correo mientras desarrollas, desactiva _Confirm email_.
 
 ### 2. Variables de entorno
 
@@ -52,7 +49,7 @@ EXPO_PUBLIC_SUPABASE_URL=https://TU-PROYECTO.supabase.co
 EXPO_PUBLIC_SUPABASE_ANON_KEY=tu-anon-key
 ```
 
-`.env` está en `.gitignore`. Usa solo la *anon key* (nunca la *service role key*).
+`.env` está en `.gitignore`. Usa solo la _anon key_ (nunca la _service role key_).
 
 ### 3. Correr la app
 
@@ -70,7 +67,7 @@ npx expo lint      # lint
 ```
 
 > **Notificaciones:** los recordatorios locales funcionan en Expo Go. Para probarlos de
-> forma confiable (sobre todo en Android), usa una *development build*
+> forma confiable (sobre todo en Android), usa una _development build_
 > (`npx expo run:android` o `eas build --profile development`).
 
 ## Estructura
