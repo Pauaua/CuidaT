@@ -49,6 +49,8 @@ function RootNavigator() {
   const ready = loaded && !initializing && profileReady;
 
   const hasProfile = isSignedIn && Boolean(profile.data);
+  const isPaused = hasProfile && Boolean(profile.data?.pausada_en);
+  const isActive = hasProfile && !isPaused;
   const needsOnboarding = isSignedIn && profile.isSuccess && !profile.data;
   const profileFailed = isSignedIn && profile.isError;
 
@@ -87,7 +89,11 @@ function RootNavigator() {
           <Stack.Screen name="sin-conexion" />
         </Stack.Protected>
 
-        <Stack.Protected guard={hasProfile}>
+        <Stack.Protected guard={isPaused}>
+          <Stack.Screen name="cuenta-pausada" />
+        </Stack.Protected>
+
+        <Stack.Protected guard={isActive}>
           <Stack.Screen name="(drawer)" />
           <Stack.Screen name="form/persona" options={{ presentation: 'modal' }} />
           <Stack.Screen name="form/medicamento" options={{ presentation: 'modal' }} />
@@ -95,6 +101,7 @@ function RootNavigator() {
           <Stack.Screen name="form/evento" options={{ presentation: 'modal' }} />
           <Stack.Screen name="form/registro" options={{ presentation: 'modal' }} />
           <Stack.Screen name="form/informacion" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="form/gasto" options={{ presentation: 'modal' }} />
         </Stack.Protected>
       </Stack>
     </NavigationThemeProvider>

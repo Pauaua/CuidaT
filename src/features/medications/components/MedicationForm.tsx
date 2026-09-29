@@ -2,8 +2,9 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useFieldArray, useForm } from 'react-hook-form';
 import { View } from 'react-native';
 
-import { FormInput, FormTextArea, FormTimePicker } from '@/components/form/ControlledFields';
+import { FormInput, FormSelect, FormTextArea, FormTimePicker } from '@/components/form/ControlledFields';
 import { AppText, Button, Card, IconButton } from '@/components/ui';
+import { useInventory } from '@/features/inventory/hooks/useInventory';
 import { useTheme } from '@/theme';
 import type { Medicamento } from '@/types/database';
 
@@ -25,6 +26,7 @@ type Props = {
 export function MedicationForm({ personId, personName, medication, onSaved }: Props) {
   const { spacing } = useTheme();
   const save = useSaveMedication();
+  const inventory = useInventory();
 
   const {
     control,
@@ -44,6 +46,11 @@ export function MedicationForm({ personId, personName, medication, onSaved }: Pr
   );
 
   const timesError = errors.horas_toma?.message ?? errors.horas_toma?.root?.message;
+
+  // Medicamentos del inventario (y el ítem ya vinculado, aunque sea de otro tipo)
+  const stockOptions = (inventory.data ?? [])
+    .filter((i) => i.tipo === 'medicamento' || i.id === medication?.inventario_id)
+    .map((i) => ({ value: i.id, label: `${i.nombre} (${i.cantidad} ${i.cantidad === 1 ? 'unidad' : 'unidades'})` }));
 
   return (
     <View style={{ gap: spacing.lg }}>
@@ -92,6 +99,37 @@ export function MedicationForm({ personId, personName, medication, onSaved }: Pr
           icon="add"
           variant="secondary"
           onPress={() => times.append({ hora: '20:00' })}
+        />
+      </Card>
+
+      <Card>
+        <AppText variant="subtitle" style={{ marginBottom: spacing.xs }}>
+          Descontar del inventario
+        </AppText>
+        <AppText color="textMuted" style={{ marginBottom: spacing.md }}>
+          Cada vez que marques una toma como dada, restaremos estas unidades del inventario y te
+          avisaremos cuando quede poco.
+        </AppText>
+        <FormSelect
+          control={control}
+          name="inventario_id"
+          label="Ítem del inventario"
+          options={stockOptions}
+          allowEmpty
+          emptyLabel="No descontar"
+          placeholder="No descontar"
+          hint={
+            stockOptions.length === 0
+              ? 'Aún no tienes medicamentos en Inventario. Agrégalo ahí y luego vincúlalo aquí.'
+              : undefined
+          }
+        />
+        <FormInput
+          control={control}
+          name="unidades_por_toma"
+          label="Unidades por toma"
+          hint="Ej: si cada toma son 2 comprimidos, escribe 2."
+          keyboardType="number-pad"
         />
       </Card>
 

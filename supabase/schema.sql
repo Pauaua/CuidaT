@@ -354,3 +354,300 @@ revoke all on function public.ajustar_inventario(uuid, integer) from public, ano
 grant execute on function public.current_usuario_id() to authenticated;
 grant execute on function public.es_persona_propia(uuid) to authenticated;
 grant execute on function public.ajustar_inventario(uuid, integer) to authenticated;
+
+-- ---------------------------------------------------------------------
+-- Descuento automático de inventario al dar una toma (migración 002)
+-- ---------------------------------------------------------------------
+
+-- Cada medicamento puede vincularse a un ítem del inventario y definir
+-- cuántas unidades se usan en cada toma.
+alter table public.medicamentos
+  add column if not exists inventario_id uuid
+    references public.inventario (id) on delete set null,
+  add column if not exists unidades_por_toma integer not null default 1;
+
+do $$ begin
+  alter table public.medicamentos
+    add constraint medicamentos_unidades_por_toma_positivas
+    check (unidades_por_toma between 1 and 100);
+exception when duplicate_object then null; end $$;
+
+create index if not exists idx_medicamentos_inventario on public.medicamentos (inventario_id);
+
+-- Solo se puede vincular un ítem del inventario propio
+drop policy if exists medicamentos_inventario_propio on public.medicamentos;
+create policy medicamentos_inventario_propio on public.medicamentos
+  as restrictive for all to authenticated
+  using (
+    inventario_id is null
+    or exists (
+      select 1 from public.inventario i
+      where i.id = inventario_id and i.usuario_id = public.current_usuario_id()
+    )
+  )
+  with check (
+    inventario_id is null
+    or exists (
+      select 1 from public.inventario i
+      where i.id = inventario_id and i.usuario_id = public.current_usuario_id()
+    )
+  );
+
+-- Al registrar una toma como dada, se descuentan sus unidades del inventario.
+-- El cambio de cantidad genera además su propio registro "cambio_inventario"
+-- (trigger trg_inventario_registro), así queda todo en el historial.
+create or replace function public.descontar_toma_inventario()
+returns trigger
+language plpgsql
+as $$
+declare
+  v_inventario uuid;
+  v_unidades integer;
+begin
+  if new.tipo = 'medicamento_administrado' and new.medicamento_id is not null then
+    select inventario_id, unidades_por_toma
+      into v_inventario, v_unidades
+      from public.medicamentos
+     where id = new.medicamento_id;
+
+    if v_inventario is not null then
+      update public.inventario
+         set cantidad = greatest(cantidad - v_unidades, 0)
+       where id = v_inventario;
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_registros_descontar_toma on public.registros;
+create trigger trg_registros_descontar_toma
+after insert on public.registros
+for each row execute function public.descontar_toma_inventario();
+
+-- ---------------------------------------------------------------------
+-- Pausar y eliminar cuenta (migración 003)
+-- ---------------------------------------------------------------------
+
+-- Pausa: si tiene fecha, la cuenta está en pausa (datos intactos, sin recordatorios).
+alter table public.usuarios
+  add column if not exists pausada_en timestamptz;
+
+-- Elimina la cuenta de quien la llama: borra su usuario de auth.users y, por las
+-- llaves foráneas "on delete cascade", todos sus datos (perfil, personas cuidadas,
+-- medicamentos, inventario, registros, servicios y agenda).
+-- security definer: necesita permisos sobre auth.users, pero solo puede borrar
+-- la cuenta del propio auth.uid(); nunca recibe un id por parámetro.
+create or replace function public.eliminar_mi_cuenta()
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_uid uuid := auth.uid();
+begin
+  if v_uid is null then
+    raise exception 'No hay una sesión activa';
+  end if;
+  delete from auth.users where id = v_uid;
+end;
+$$;
+
+revoke all on function public.eliminar_mi_cuenta() from public, anon;
+grant execute on function public.eliminar_mi_cuenta() to authenticated;
+
+-- ---------------------------------------------------------------------
+-- Gastos (migración 004)
+-- ---------------------------------------------------------------------
+
+do $$ begin
+  create type public.categoria_gasto as enum ('medicamento', 'otro');
+exception when duplicate_object then null; end $$;
+
+create table if not exists public.gastos (
+  id uuid primary key default gen_random_uuid(),
+  usuario_id uuid not null default public.current_usuario_id()
+    references public.usuarios (id) on delete cascade,
+  persona_cuidada_id uuid references public.personas_cuidadas (id) on delete set null,
+  categoria public.categoria_gasto not null,
+  -- Qué se compró (ej: "Losartán 50 mg", "Pañales talla M")
+  nombre text not null,
+  -- Total pagado, en pesos chilenos (sin decimales)
+  precio integer not null check (precio between 0 and 100000000),
+  -- Unidades compradas; sirve para comparar el precio por unidad entre lugares
+  cantidad integer not null default 1 check (cantidad between 1 and 10000),
+  -- Farmacia o tienda donde se compró
+  lugar text,
+  fecha date not null default current_date,
+  notas text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_gastos_usuario_fecha on public.gastos (usuario_id, fecha desc);
+create index if not exists idx_gastos_usuario_categoria on public.gastos (usuario_id, categoria);
+
+drop trigger if exists trg_gastos_updated_at on public.gastos;
+create trigger trg_gastos_updated_at before update on public.gastos
+for each row execute function public.set_updated_at();
+
+alter table public.gastos enable row level security;
+
+drop policy if exists gastos_select on public.gastos;
+create policy gastos_select on public.gastos for select to authenticated
+  using (usuario_id = public.current_usuario_id());
+drop policy if exists gastos_insert on public.gastos;
+create policy gastos_insert on public.gastos for insert to authenticated
+  with check (usuario_id = public.current_usuario_id());
+drop policy if exists gastos_update on public.gastos;
+create policy gastos_update on public.gastos for update to authenticated
+  using (usuario_id = public.current_usuario_id())
+  with check (usuario_id = public.current_usuario_id());
+drop policy if exists gastos_delete on public.gastos;
+create policy gastos_delete on public.gastos for delete to authenticated
+  using (usuario_id = public.current_usuario_id());
+
+-- La persona cuidada referenciada (si existe) también debe ser propia
+drop policy if exists gastos_persona_propia on public.gastos;
+create policy gastos_persona_propia on public.gastos
+  as restrictive for all to authenticated
+  using (persona_cuidada_id is null or public.es_persona_propia(persona_cuidada_id))
+  with check (persona_cuidada_id is null or public.es_persona_propia(persona_cuidada_id));
+
+-- ---------------------------------------------------------------------
+-- Las compras suman al inventario (migración 005)
+-- ---------------------------------------------------------------------
+
+-- Ítem del inventario al que se sumaron las unidades de esta compra (opcional)
+alter table public.gastos
+  add column if not exists inventario_id uuid
+    references public.inventario (id) on delete set null;
+
+create index if not exists idx_gastos_inventario on public.gastos (inventario_id);
+
+-- Solo se puede vincular un ítem del inventario propio
+drop policy if exists gastos_inventario_propio on public.gastos;
+create policy gastos_inventario_propio on public.gastos
+  as restrictive for all to authenticated
+  using (
+    inventario_id is null
+    or exists (
+      select 1 from public.inventario i
+      where i.id = inventario_id and i.usuario_id = public.current_usuario_id()
+    )
+  )
+  with check (
+    inventario_id is null
+    or exists (
+      select 1 from public.inventario i
+      where i.id = inventario_id and i.usuario_id = public.current_usuario_id()
+    )
+  );
+
+-- Mantiene el inventario en línea con las compras:
+--   crear compra      → suma sus unidades
+--   editar compra     → quita las unidades anteriores y suma las nuevas
+--   eliminar compra   → quita sus unidades (sin bajar de 0)
+-- Cada cambio de cantidad queda en el historial por trg_inventario_registro.
+create or replace function public.sincronizar_compra_inventario()
+returns trigger
+language plpgsql
+as $$
+begin
+  -- Mismo ítem y cambió la cantidad: se aplica solo la diferencia (un registro)
+  if tg_op = 'UPDATE' and old.inventario_id is not distinct from new.inventario_id then
+    if new.inventario_id is not null and old.cantidad <> new.cantidad then
+      update public.inventario
+         set cantidad = greatest(cantidad + new.cantidad - old.cantidad, 0)
+       where id = new.inventario_id;
+    end if;
+    return new;
+  end if;
+
+  if tg_op in ('UPDATE', 'DELETE') and old.inventario_id is not null then
+    if tg_op = 'DELETE'
+       or old.inventario_id is distinct from new.inventario_id
+       or old.cantidad <> new.cantidad then
+      update public.inventario
+         set cantidad = greatest(cantidad - old.cantidad, 0)
+       where id = old.inventario_id;
+    end if;
+  end if;
+
+  if tg_op in ('INSERT', 'UPDATE') and new.inventario_id is not null then
+    if tg_op = 'INSERT'
+       or old.inventario_id is distinct from new.inventario_id
+       or old.cantidad <> new.cantidad then
+      update public.inventario
+         set cantidad = cantidad + new.cantidad
+       where id = new.inventario_id;
+    end if;
+  end if;
+
+  if tg_op = 'DELETE' then
+    return old;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_gastos_inventario on public.gastos;
+create trigger trg_gastos_inventario
+after insert or update of cantidad, inventario_id or delete on public.gastos
+for each row execute function public.sincronizar_compra_inventario();
+
+-- Registra una compra creando en el mismo paso su ítem del inventario
+-- (todo o nada). security invoker: respeta las políticas RLS de quien llama.
+create or replace function public.crear_gasto_con_item(
+  p_categoria public.categoria_gasto,
+  p_nombre text,
+  p_precio integer,
+  p_cantidad integer,
+  p_lugar text,
+  p_fecha date,
+  p_persona_cuidada_id uuid,
+  p_notas text,
+  p_umbral_bajo integer
+)
+returns public.gastos
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  v_item uuid;
+  v_gasto public.gastos;
+begin
+  insert into public.inventario (nombre, tipo, cantidad, umbral_bajo, persona_cuidada_id)
+  values (
+    p_nombre,
+    case when p_categoria = 'medicamento' then 'medicamento'::public.tipo_inventario
+         else 'insumo'::public.tipo_inventario end,
+    0,
+    greatest(coalesce(p_umbral_bajo, 5), 0),
+    p_persona_cuidada_id
+  )
+  returning id into v_item;
+
+  -- El trigger trg_gastos_inventario suma p_cantidad al ítem recién creado
+  insert into public.gastos (
+    categoria, nombre, precio, cantidad, lugar, fecha,
+    persona_cuidada_id, notas, inventario_id
+  )
+  values (
+    p_categoria, p_nombre, p_precio, p_cantidad, p_lugar, coalesce(p_fecha, current_date),
+    p_persona_cuidada_id, p_notas, v_item
+  )
+  returning * into v_gasto;
+
+  return v_gasto;
+end;
+$$;
+
+revoke all on function public.crear_gasto_con_item(
+  public.categoria_gasto, text, integer, integer, text, date, uuid, text, integer
+) from public, anon;
+grant execute on function public.crear_gasto_con_item(
+  public.categoria_gasto, text, integer, integer, text, date, uuid, text, integer
+) to authenticated;

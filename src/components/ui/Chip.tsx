@@ -9,17 +9,18 @@ type Props = {
   selected: boolean;
   onPress: () => void;
   color?: string;
+  accessibilityLabel?: string;
 };
 
 /** Chip seleccionable para filtros. */
-export function Chip({ label, selected, onPress, color }: Props) {
+export function Chip({ label, selected, onPress, color, accessibilityLabel }: Props) {
   const { colors, radii, spacing, touchTarget } = useTheme();
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
       accessibilityState={{ selected }}
-      accessibilityLabel={`Filtro ${label}`}
+      accessibilityLabel={accessibilityLabel ?? `Filtro ${label}`}
       style={({ pressed }) => ({
         minHeight: touchTarget,
         justifyContent: 'center',

@@ -21,3 +21,17 @@ export async function updateMedication(id: string, values: MedicamentoInsert): P
 export async function deleteMedication(id: string): Promise<void> {
   assertOk(await supabase.from('medicamentos').delete().eq('id', id));
 }
+
+/**
+ * Vincula un medicamento a un ítem del inventario solo si aún no tiene uno,
+ * para que sus tomas se descuenten de ese stock.
+ */
+export async function linkMedicationToInventory(id: string, inventarioId: string): Promise<void> {
+  assertOk(
+    await supabase
+      .from('medicamentos')
+      .update({ inventario_id: inventarioId })
+      .eq('id', id)
+      .is('inventario_id', null)
+  );
+}

@@ -2,16 +2,19 @@ import { Ionicons } from '@expo/vector-icons';
 import { View } from 'react-native';
 
 import { AppText, Badge, Card } from '@/components/ui';
+import { isLowStock, unitsLabel } from '@/features/inventory/constants';
 import { normalizeTime } from '@/lib/dates';
 import { useTheme } from '@/theme';
-import type { Medicamento } from '@/types/database';
+import type { ItemInventario, Medicamento } from '@/types/database';
 
 type Props = {
   medication: Medicamento;
+  /** Ítem del inventario vinculado (si existe). */
+  stock?: ItemInventario;
   onPress: () => void;
 };
 
-export function MedicationCard({ medication, onPress }: Props) {
+export function MedicationCard({ medication, stock, onPress }: Props) {
   const { colors, spacing } = useTheme();
   const times = medication.horas_toma.map(normalizeTime);
 
@@ -43,6 +46,12 @@ export function MedicationCard({ medication, onPress }: Props) {
               <Badge key={t} label={t} icon="alarm-outline" tone="primary" />
             ))}
           </View>
+          {stock ? (
+            <AppText variant="caption" color={isLowStock(stock) ? 'dangerText' : 'textMuted'} style={{ marginTop: spacing.xs }}>
+              Descuenta {unitsLabel(medication.unidades_por_toma)} por toma de “{stock.nombre}” · quedan{' '}
+              {unitsLabel(stock.cantidad)}
+            </AppText>
+          ) : null}
           {medication.indicaciones_especiales ? (
             <AppText variant="caption" color="textMuted" style={{ marginTop: spacing.xs }}>
               {medication.indicaciones_especiales}

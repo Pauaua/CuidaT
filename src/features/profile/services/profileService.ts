@@ -17,3 +17,24 @@ export async function saveProfile(values: UsuarioInsert, existingId?: string): P
   }
   return unwrap(await supabase.from('usuarios').insert(values).select().single());
 }
+
+/** Pausa (fecha actual) o reactiva (null) la cuenta. Los datos no se tocan. */
+export async function setAccountPaused(id: string, paused: boolean): Promise<Usuario> {
+  return unwrap(
+    await supabase
+      .from('usuarios')
+      .update({ pausada_en: paused ? new Date().toISOString() : null })
+      .eq('id', id)
+      .select()
+      .single()
+  );
+}
+
+/**
+ * Elimina para siempre la cuenta y todos sus datos (función SQL
+ * `eliminar_mi_cuenta`, que solo puede borrar la cuenta de quien la llama).
+ */
+export async function deleteMyAccount(): Promise<void> {
+  const { error } = await supabase.rpc('eliminar_mi_cuenta');
+  if (error) throw toFriendlyError(error);
+}

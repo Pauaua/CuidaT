@@ -12,6 +12,7 @@ export const navSections: { title: string; items: NavItem[] }[] = [
       { route: 'index', label: 'Inicio', icon: 'home-outline', activeIcon: 'home' },
       { route: 'cuidado', label: 'Cuidado', icon: 'heart-outline', activeIcon: 'heart' },
       { route: 'inventario', label: 'Inventario', icon: 'cube-outline', activeIcon: 'cube' },
+      { route: 'gastos', label: 'Gastos', icon: 'logo-usd', activeIcon: 'logo-usd' },
       { route: 'registros', label: 'Registros', icon: 'time-outline', activeIcon: 'time' },
     ],
   },

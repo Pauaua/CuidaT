@@ -2,10 +2,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
 
 import { usePersonNames } from '@/features/care/hooks/usePersons';
+import { getInventoryItem } from '@/features/inventory/services/inventoryService';
 import { createRecord, listGivenDoses } from '@/features/records/services/recordService';
 import { normalizeTime, timeToMinutes, toISODate } from '@/lib/dates';
 import { queryKeys } from '@/lib/queryClient';
-import type { Medicamento } from '@/types/database';
+import type { ItemInventario, Medicamento } from '@/types/database';
 
 import { useMedications } from './useMedications';
 
@@ -73,14 +74,28 @@ export function useTodayDoses() {
 export function useMarkDoseGiven() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (dose: Dose) =>
-      createRecord({
+    mutationFn: async (dose: Dose): Promise<MarkDoseResult> => {
+      // La base de datos descuenta las unidades del inventario (trigger)
+      await createRecord({
         tipo: 'medicamento_administrado',
         persona_cuidada_id: dose.medication.persona_cuidada_id,
         medicamento_id: dose.medication.id,
         hora_programada: dose.time,
         descripcion: `Diste ${dose.medication.nombre} (${dose.medication.dosis}) a ${dose.personName}, toma de las ${dose.time}`,
-      }),
-    onSuccess: () => client.invalidateQueries({ queryKey: queryKeys.records }),
+      });
+      const stock = dose.medication.inventario_id
+        ? await getInventoryItem(dose.medication.inventario_id).catch(() => null)
+        : null;
+      return { stock };
+    },
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: queryKeys.records });
+      client.invalidateQueries({ queryKey: queryKeys.inventory });
+    },
   });
 }
+
+export type MarkDoseResult = {
+  /** Estado del inventario vinculado después de descontar la toma (si hay vínculo). */
+  stock: ItemInventario | null;
+};

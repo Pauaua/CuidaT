@@ -1,9 +1,11 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { View } from 'react-native';
+import { Alert, View } from 'react-native';
 
 import { AppText, Button, Card, EmptyState, ErrorState, Screen, SkeletonList } from '@/components/ui';
 import { LowStockAlerts } from '@/features/inventory/components/LowStockAlerts';
+import { isLowStock, stockAlertMessage, stockAlertTitle } from '@/features/inventory/constants';
+import { useInventory } from '@/features/inventory/hooks/useInventory';
 import { DoseItem } from '@/features/medications/components/DoseItem';
 import { useMarkDoseGiven, useTodayDoses } from '@/features/medications/hooks/useTodayDoses';
 import { useProfile } from '@/features/profile/hooks/useProfile';
@@ -45,6 +47,8 @@ export default function HomeScreen() {
 function TodayDosesSection({ doses, isLoading, isError, refetch }: ReturnType<typeof useTodayDoses>) {
   const { spacing } = useTheme();
   const markGiven = useMarkDoseGiven();
+  const inventory = useInventory();
+  const stockById = new Map((inventory.data ?? []).map((i) => [i.id, i]));
   const remaining = doses.filter((d) => !d.given).length;
 
   return (
@@ -76,8 +80,17 @@ function TodayDosesSection({ doses, isLoading, isError, refetch }: ReturnType<ty
             <DoseItem
               key={dose.key}
               dose={dose}
+              stock={dose.medication.inventario_id ? stockById.get(dose.medication.inventario_id) : undefined}
               loading={markGiven.isPending && markGiven.variables?.key === dose.key}
-              onMarkGiven={() => markGiven.mutate(dose)}
+              onMarkGiven={() =>
+                markGiven.mutate(dose, {
+                  onSuccess: ({ stock }) => {
+                    if (stock && isLowStock(stock)) {
+                      Alert.alert(stockAlertTitle(stock), stockAlertMessage(stock));
+                    }
+                  },
+                })
+              }
             />
           ))}
           {markGiven.error ? (
