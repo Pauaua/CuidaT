@@ -12,6 +12,7 @@ export type TipoRegistro =
   | 'cambio_inventario'
   | 'nota'
   | 'actividad';
+export type CategoriaGasto = 'medicamento' | 'otro';
 export type TipoEvento = 'turno_cuidado' | 'dia_libre' | 'actividad_social' | 'autocuidado';
 
 type Timestamps = {
@@ -35,6 +36,8 @@ export type Usuario = Timestamps & {
   correo: string | null;
   telefono: string | null;
   recreacion: string | null;
+  /** Si tiene fecha, la cuenta está en pausa (sin recordatorios). */
+  pausada_en: string | null;
 };
 
 export type PersonaCuidada = Timestamps & {
@@ -62,6 +65,10 @@ export type Medicamento = Timestamps & {
   /** Horas en formato "HH:MM:SS" (tipo time de PostgreSQL). */
   horas_toma: string[];
   indicaciones_especiales: string | null;
+  /** Ítem del inventario del que se descuenta cada toma (opcional). */
+  inventario_id: string | null;
+  /** Unidades que se descuentan del inventario en cada toma. */
+  unidades_por_toma: number;
 };
 
 export type ItemInventario = Timestamps & {
@@ -108,6 +115,25 @@ export type EventoRecreacion = Timestamps & {
   tipo: TipoEvento;
 };
 
+export type Gasto = Timestamps & {
+  id: string;
+  usuario_id: string;
+  persona_cuidada_id: string | null;
+  categoria: CategoriaGasto;
+  nombre: string;
+  /** Total pagado en pesos chilenos. */
+  precio: number;
+  /** Unidades compradas (para comparar precio por unidad). */
+  cantidad: number;
+  /** Farmacia o tienda. */
+  lugar: string | null;
+  /** YYYY-MM-DD */
+  fecha: string;
+  notas: string | null;
+  /** Ítem del inventario al que se sumaron las unidades compradas (opcional). */
+  inventario_id: string | null;
+};
+
 /** Columnas que la base de datos completa sola (id, fechas y dueño). */
 type AutoColumns = 'id' | 'created_at' | 'updated_at' | 'usuario_id' | 'auth_user_id';
 
@@ -123,7 +149,7 @@ type Table<T> = {
   Relationships: [];
 };
 
-export type UsuarioInsert = InsertOf<Usuario>;
+export type UsuarioInsert = Optionalize<InsertOf<Usuario>, 'pausada_en'>;
 export type PersonaCuidadaInsert = Optionalize<
   InsertOf<PersonaCuidada>,
   'cuenta_auth_id' | 'rutinas'
@@ -136,11 +162,17 @@ export type RegistroInsert = Optionalize<
 >;
 export type InformacionInsert = InsertOf<Informacion>;
 export type EventoRecreacionInsert = InsertOf<EventoRecreacion>;
+export type GastoInsert = InsertOf<Gasto>;
 
 export type Database = {
   public: {
     Tables: {
-      usuarios: Table<Usuario>;
+      usuarios: {
+        Row: Usuario;
+        Insert: UsuarioInsert;
+        Update: UpdateOf<Usuario>;
+        Relationships: [];
+      };
       personas_cuidadas: {
         Row: PersonaCuidada;
         Insert: PersonaCuidadaInsert;
@@ -157,10 +189,26 @@ export type Database = {
       };
       informaciones: Table<Informacion>;
       eventos_recreacion: Table<EventoRecreacion>;
+      gastos: Table<Gasto>;
     };
     Views: { [_ in never]: never };
     Functions: {
       current_usuario_id: { Args: Record<string, never>; Returns: string };
+      eliminar_mi_cuenta: { Args: Record<string, never>; Returns: undefined };
+      crear_gasto_con_item: {
+        Args: {
+          p_categoria: CategoriaGasto;
+          p_nombre: string;
+          p_precio: number;
+          p_cantidad: number;
+          p_lugar: string | null;
+          p_fecha: string;
+          p_persona_cuidada_id: string | null;
+          p_notas: string | null;
+          p_umbral_bajo: number;
+        };
+        Returns: Gasto;
+      };
       es_persona_propia: { Args: { p_persona_id: string }; Returns: boolean };
       ajustar_inventario: {
         Args: { p_id: string; p_delta: number };
@@ -172,6 +220,7 @@ export type Database = {
       tipo_inventario: TipoInventario;
       tipo_registro: TipoRegistro;
       tipo_evento: TipoEvento;
+      categoria_gasto: CategoriaGasto;
     };
     CompositeTypes: { [_ in never]: never };
   };

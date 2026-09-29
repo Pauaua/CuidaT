@@ -5,6 +5,7 @@ import { View } from 'react-native';
 import { AppText, Badge, Button, Card, EmptyState, ErrorState, SkeletonList } from '@/components/ui';
 import { SegmentedTabs } from '@/components/ui/SegmentedTabs';
 import { MedicationCard } from '@/features/medications/components/MedicationCard';
+import { useInventory } from '@/features/inventory/hooks/useInventory';
 import { useMedicationsByPerson } from '@/features/medications/hooks/useMedications';
 import { callPhone, openInMaps } from '@/lib/linking';
 import { useTheme } from '@/theme';
@@ -70,6 +71,8 @@ function DataTab({ person }: { person: PersonaCuidada }) {
 function MedicationsTab({ person }: { person: PersonaCuidada }) {
   const { spacing } = useTheme();
   const meds = useMedicationsByPerson(person.id);
+  const inventory = useInventory();
+  const stockById = new Map((inventory.data ?? []).map((i) => [i.id, i]));
 
   const openForm = (medId?: string) =>
     router.push({ pathname: '/form/medicamento', params: { personaId: person.id, id: medId } });
@@ -82,7 +85,12 @@ function MedicationsTab({ person }: { person: PersonaCuidada }) {
       {meds.data && meds.data.length > 0 ? (
         <>
           {meds.data.map((m) => (
-            <MedicationCard key={m.id} medication={m} onPress={() => openForm(m.id)} />
+            <MedicationCard
+              key={m.id}
+              medication={m}
+              stock={m.inventario_id ? stockById.get(m.inventario_id) : undefined}
+              onPress={() => openForm(m.id)}
+            />
           ))}
           <Button title="Agregar medicamento" icon="add" variant="secondary" onPress={() => openForm()} />
         </>

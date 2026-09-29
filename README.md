@@ -119,6 +119,26 @@ React Query y la **UI** solo consume hooks.
     un trigger en la base de datos.
   - Los botones + y − usan la función `ajustar_inventario` (atómica) y actualizan la
     pantalla al instante, antes de que responda el servidor.
+  - Un medicamento puede vincularse a un ítem del inventario con sus unidades por toma. Al
+    marcar la toma como dada, un trigger (`descontar_toma_inventario`) resta esas unidades y la
+    app avisa si el stock llegó a su umbral. En proyectos creados antes de este cambio, ejecuta
+    `supabase/migrations/002_descuento_inventario.sql`.
+- **Pausar y eliminar cuenta** (Configuración → Cuenta):
+  - Pausar guarda la fecha en `usuarios.pausada_en`: se cancelan los recordatorios y la app
+    muestra una pantalla para reactivarla. Los datos no se tocan.
+  - Eliminar llama a la función `eliminar_mi_cuenta()`, que borra el usuario de `auth.users`
+    y, en cascada, todos sus datos. Solo puede borrar la cuenta de quien la llama.
+  - En proyectos creados antes de este cambio, ejecuta `supabase/migrations/003_pausar_eliminar_cuenta.sql`.
+- **Gastos** (tabla `gastos`): registro de compras en dos categorías, Medicamentos y Otros,
+  con precio en pesos, unidades, lugar o farmacia y fecha. Muestra el total del mes y, para
+  productos comprados en 2 o más lugares, dónde salió más barato por unidad. En proyectos
+  creados antes de este cambio, ejecuta `supabase/migrations/004_gastos.sql`.
+- **Compras → inventario → tomas:** al registrar una compra en Gastos se elige si sus unidades
+  se suman a un ítem existente, crean uno nuevo (función `crear_gasto_con_item`, todo o nada) o
+  no se suman. El trigger `sincronizar_compra_inventario` suma al crear, ajusta la diferencia al
+  editar y resta al eliminar. Si la compra se inició desde un medicamento sin stock vinculado,
+  se vincula para que cada toma dada descuente de ese ítem. En proyectos creados antes de este
+  cambio, ejecuta `supabase/migrations/005_compras_suman_inventario.sql`.
 - **Recordatorios:** cada hora de toma programa una notificación diaria con el id
   `med-<id>-<HHMM>`. Al abrir la app se resincronizan con la base de datos, por ejemplo
   si cambias de teléfono. Se pueden desactivar en Configuración.

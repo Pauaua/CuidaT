@@ -1,4 +1,4 @@
-import { Pressable, Switch, View } from 'react-native';
+import { Alert, Pressable, Switch, View } from 'react-native';
 
 import { AppText, Button, Card, Header, Screen, SegmentedTabs } from '@/components/ui';
 import { APP_CONFIG } from '@/config/app';
@@ -8,6 +8,8 @@ import {
   isExpoGoAndroid,
   notificationsSupported,
 } from '@/features/medications/services/notificationsModule';
+import { useDeleteAccount, usePauseAccount } from '@/features/profile/hooks/useAccountActions';
+import { useProfile } from '@/features/profile/hooks/useProfile';
 import { useSettings } from '@/features/settings/hooks/SettingsProvider';
 import { confirmAction } from '@/lib/confirm';
 import { useTheme, type ThemePreference } from '@/theme';
@@ -22,6 +24,39 @@ export default function SettingsScreen() {
   const { colors, spacing, touchTarget } = useTheme();
   const { settings, updateSettings } = useSettings();
   const signOut = useSignOut();
+  const profile = useProfile();
+  const pause = usePauseAccount();
+  const remove = useDeleteAccount();
+
+  const onPause = () =>
+    confirmAction(
+      '¿Pausar tu cuenta?',
+      'Dejaremos de enviarte recordatorios de medicamentos hasta que la reactives. Toda tu información queda guardada.',
+      () =>
+        profile.data &&
+        pause.mutate(profile.data.id, {
+          onError: (e) => Alert.alert('No pudimos pausar tu cuenta', e.message),
+        }),
+      'Pausar'
+    );
+
+  // Doble confirmación: es una acción que no se puede deshacer
+  const onDelete = () =>
+    confirmAction(
+      '¿Eliminar tu cuenta?',
+      'Se borrará para siempre tu perfil y todo lo que registraste: personas cuidadas, medicamentos, inventario, registros, servicios y agenda.',
+      () =>
+        confirmAction(
+          '¿Confirmas que quieres eliminarla?',
+          'Esta acción no se puede deshacer. Si solo necesitas un descanso, puedes pausar tu cuenta.',
+          () =>
+            remove.mutate(undefined, {
+              onError: (e) => Alert.alert('No pudimos eliminar tu cuenta', e.message),
+            }),
+          'Eliminar para siempre'
+        ),
+      'Continuar'
+    );
 
   const toggleReminders = async (enabled: boolean) => {
     if (enabled) await ensureNotificationPermission();
@@ -96,15 +131,43 @@ export default function SettingsScreen() {
           <AppText variant="subtitle" style={{ marginBottom: spacing.sm }}>
             Cuenta
           </AppText>
-          <Button
-            title="Cerrar sesión"
-            variant="danger"
-            icon="log-out-outline"
-            loading={signOut.isPending}
-            onPress={() =>
-              confirmAction('¿Cerrar sesión?', 'Tus datos quedan guardados en tu cuenta.', () => signOut.mutate(), 'Cerrar sesión')
-            }
-          />
+          <View style={{ gap: spacing.sm }}>
+            <Button
+              title="Cerrar sesión"
+              variant="secondary"
+              icon="log-out-outline"
+              fullWidth
+              loading={signOut.isPending}
+              onPress={() =>
+                confirmAction('¿Cerrar sesión?', 'Tus datos quedan guardados en tu cuenta.', () => signOut.mutate(), 'Cerrar sesión')
+              }
+            />
+
+            <Button
+              title="Pausar cuenta"
+              variant="secondary"
+              icon="pause-outline"
+              fullWidth
+              loading={pause.isPending}
+              onPress={onPause}
+            />
+            <AppText variant="caption" color="textMuted">
+              Detiene los recordatorios mientras te tomas un respiro. Tus datos quedan guardados y
+              puedes reactivarla cuando quieras.
+            </AppText>
+
+            <Button
+              title="Eliminar cuenta"
+              variant="danger"
+              icon="trash-outline"
+              fullWidth
+              loading={remove.isPending}
+              onPress={onDelete}
+            />
+            <AppText variant="caption" color="textMuted">
+              Borra para siempre tu cuenta y toda tu información. No se puede deshacer.
+            </AppText>
+          </View>
         </Card>
 
         <AppText variant="caption" color="textMuted" align="center">

@@ -17,6 +17,12 @@ export const medicationSchema = z.object({
       'Hay horas repetidas'
     ),
   indicaciones_especiales: optionalText(1000),
+  inventario_id: z.string().nullable(),
+  unidades_por_toma: z
+    .string()
+    .trim()
+    .regex(/^\d{1,3}$/, 'Ingresa un número entero')
+    .refine((v) => Number(v) >= 1 && Number(v) <= 100, 'Debe ser entre 1 y 100'),
 });
 
 export type MedicationFormValues = z.infer<typeof medicationSchema>;
@@ -28,6 +34,8 @@ export function medicationToForm(medication: Medicamento | undefined): Medicatio
     dosis: nullToEmpty(medication?.dosis),
     horas_toma: (medication?.horas_toma ?? ['08:00']).map((h) => ({ hora: normalizeTime(h) })),
     indicaciones_especiales: nullToEmpty(medication?.indicaciones_especiales),
+    inventario_id: medication?.inventario_id ?? null,
+    unidades_por_toma: String(medication?.unidades_por_toma ?? 1),
   };
 }
 
@@ -44,5 +52,7 @@ export function formToMedication(
       .map((h) => h.hora)
       .sort((a, b) => timeToMinutes(a) - timeToMinutes(b)),
     indicaciones_especiales: emptyToNull(values.indicaciones_especiales),
+    inventario_id: values.inventario_id,
+    unidades_por_toma: Number.parseInt(values.unidades_por_toma, 10),
   };
 }

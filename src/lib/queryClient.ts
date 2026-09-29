@@ -30,4 +30,6 @@ export const queryKeys = {
   events: ['events'] as const,
   eventsRange: (from: string, to: string) => ['events', 'range', from, to] as const,
   event: (id: string) => ['events', 'detail', id] as const,
+  expenses: ['expenses'] as const,
+  expense: (id: string) => ['expenses', id] as const,
 };

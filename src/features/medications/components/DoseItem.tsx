@@ -2,17 +2,21 @@ import { Ionicons } from '@expo/vector-icons';
 import { View } from 'react-native';
 
 import { AppText, Badge, Button } from '@/components/ui';
+import { isLowStock, unitsLabel } from '@/features/inventory/constants';
 import { useTheme } from '@/theme';
+import type { ItemInventario } from '@/types/database';
 
 import type { Dose } from '../hooks/useTodayDoses';
 
 type Props = {
   dose: Dose;
+  /** Ítem del inventario vinculado, para mostrar cuánto queda. */
+  stock?: ItemInventario;
   onMarkGiven: () => void;
   loading: boolean;
 };
 
-export function DoseItem({ dose, onMarkGiven, loading }: Props) {
+export function DoseItem({ dose, stock, onMarkGiven, loading }: Props) {
   const { colors, radii, spacing } = useTheme();
 
   return (
@@ -36,7 +40,16 @@ export function DoseItem({ dose, onMarkGiven, loading }: Props) {
         <AppText variant="caption" color="textMuted">
           {dose.medication.dosis} · {dose.personName}
         </AppText>
-        {dose.pending ? <Badge label="Pendiente" tone="warning" icon="time-outline" /> : null}
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs }}>
+          {dose.pending ? <Badge label="Pendiente" tone="warning" icon="time-outline" /> : null}
+          {stock ? (
+            <Badge
+              label={`Quedan ${unitsLabel(stock.cantidad)}`}
+              tone={isLowStock(stock) ? 'warning' : 'neutral'}
+              icon={isLowStock(stock) ? 'alert-circle-outline' : 'cube-outline'}
+            />
+          ) : null}
+        </View>
       </View>
       {dose.given ? (
         <View

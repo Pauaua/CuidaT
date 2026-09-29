@@ -42,6 +42,17 @@ export function toFriendlyError(error: unknown): Error {
     typeof error === 'object' && error !== null && 'message' in error
       ? String((error as { message: unknown }).message)
       : '';
+  const code =
+    typeof error === 'object' && error !== null && 'code' in error
+      ? String((error as { code: unknown }).code)
+      : '';
+
+  // Columna, tabla o función inexistente: falta ejecutar una migración en Supabase
+  if (['42703', '42P01', '42883', 'PGRST202', 'PGRST204', 'PGRST205'].includes(code)) {
+    return new Error(
+      'La base de datos necesita una actualización. Ejecuta las migraciones pendientes de supabase/migrations en Supabase.'
+    );
+  }
 
   if (/network|fetch/i.test(message)) {
     return new Error('No pudimos conectarnos. Revisa tu conexión a internet e inténtalo de nuevo.');
