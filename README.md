@@ -170,3 +170,10 @@ que comparen `cuenta_auth_id = auth.uid()` en `personas_cuidadas`, `medicamentos
 
 - App para la persona cuidada
 - Pagos y suscripciones
+
+## Declaración de uso de IA
+
+Durante el desarrollo de este proyecto se utilizó Claude (Anthropic), a través de
+Claude Code, como asistente de programación: apoyo en la escritura y revisión de código,
+documentación y resolución de errores. Todo el código fue revisado, probado y aprobado
+por la autora, quien es responsable del resultado final.
